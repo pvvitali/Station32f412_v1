@@ -44,6 +44,9 @@
 /* USER CODE BEGIN PV */
 extern uint16_t pwm_value;
 extern uint16_t on_off_accum_value;
+extern uint16_t sim800_on_off;
+extern _Bool event_happened;
+
 extern _Bool forse_write_eeprom;
 //UART1
 extern volatile uint8_t receiveUart1Byte;
@@ -229,19 +232,35 @@ void USART1_IRQHandler(void)
 }
 
 /**
+  * @brief This function handles USART2 global interrupt.
+  */
+void USART2_IRQHandler(void)
+{
+  /* USER CODE BEGIN USART2_IRQn 0 */
+
+	uint8_t d = LL_USART_ReceiveData8(USART2);
+	while (!LL_USART_IsActiveFlag_TXE(USART3)) {}
+	LL_USART_TransmitData8(USART3, d);
+  /* USER CODE END USART2_IRQn 0 */
+  /* USER CODE BEGIN USART2_IRQn 1 */
+
+  /* USER CODE END USART2_IRQn 1 */
+}
+
+/**
   * @brief This function handles USART3 global interrupt.
   */
 void USART3_IRQHandler(void)
 {
   /* USER CODE BEGIN USART3_IRQn 0 */
 
-//	uint8_t d = USART3->DR; // получить данное
-//	while ((USART6->SR & USART_SR_TXE) == 0) {}
-//	USART6->DR = d; // отослать данное назад
-
 	uint8_t d = LL_USART_ReceiveData8(USART3);
 	while (!LL_USART_IsActiveFlag_TXE(USART6)) {}
 	LL_USART_TransmitData8(USART6, d);
+
+//	uint8_t d = LL_USART_ReceiveData8(USART3);
+//	while (!LL_USART_IsActiveFlag_TXE(USART2)) {}
+//	LL_USART_TransmitData8(USART2, d);
 
   /* USER CODE END USART3_IRQn 0 */
   /* USER CODE BEGIN USART3_IRQn 1 */
@@ -265,6 +284,11 @@ void USART6_IRQHandler(void)
 	if( Dwin_receive_data_2(d, 0x5017, &on_off_accum_value) == 1 ){
 		forse_write_eeprom = 1;
 	}
+	if( Dwin_receive_data_3(d, 0x5030, &sim800_on_off) == 1 ){
+		forse_write_eeprom = 1;
+		event_happened = 1;
+	}
+	// Transfer to uart3
 	while (!LL_USART_IsActiveFlag_TXE(USART3)) {}
 	LL_USART_TransmitData8(USART3, d);
 

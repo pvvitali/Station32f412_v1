@@ -274,3 +274,87 @@ uint8_t Dwin_receive_data_2(uint8_t receiveUartByte,
 
 }
 
+
+//return 0 - else not fined; 1 - data fined and receiveUartByted
+uint8_t Dwin_receive_data_3(uint8_t receiveUartByte,
+							uint16_t address,
+							uint16_t * data_receive
+							){
+	static uint8_t faze_sim = 0;
+	static uint8_t data_receive_high = 0;
+	static uint8_t data_receive_low = 0;
+
+	// find char =============================================
+	switch (faze_sim){
+		case 0:
+			if(receiveUartByte == 0x5A) faze_sim = 1;
+			break;
+
+		case 1:
+			if(receiveUartByte == 0x5A){
+				faze_sim = 1;
+				break;
+			}
+			if(receiveUartByte == 0xA5){
+				faze_sim = 2;
+				break;
+			}
+			faze_sim = 0;
+			break;
+
+		case 2:
+			if(receiveUartByte == 0x06){	//size data of dwin packet
+				faze_sim = 3;
+				break;
+			}
+			faze_sim = 0;
+			break;
+
+		case 3:
+			if(receiveUartByte == 0x83 ){
+				faze_sim = 4;
+				break;
+			}
+			faze_sim = 0;
+			break;
+
+		case 4:
+			if(receiveUartByte == (uint8_t)(address >> 8) ){
+				faze_sim = 5;
+				break;
+			}
+			faze_sim = 0;
+			break;
+
+		case 5:
+			if(receiveUartByte == (uint8_t)address ){
+				faze_sim = 6;
+				break;
+			}
+			faze_sim = 0;
+			break;
+
+		case 6:
+			if(receiveUartByte == 0x01){
+				faze_sim = 7;
+				break;
+			}
+			faze_sim = 0;
+			break;
+
+		case 7:
+			data_receive_high = receiveUartByte;
+			faze_sim = 8;
+			break;
+
+		case 8:
+			data_receive_low = receiveUartByte;
+			faze_sim = 0;
+			*data_receive = ( ((uint16_t)data_receive_high << 8) & 0xFF00) | ((uint16_t)data_receive_low & 0x00FF);
+			return 1;
+	} //end switch
+
+
+	return 0;
+
+}

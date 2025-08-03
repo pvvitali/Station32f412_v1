@@ -110,6 +110,7 @@ uint8_t countSimReadBuff = 0;
 //interrupt sim
 volatile uint8_t receiveUart1Byte = 0;
 volatile uint8_t flag_is_receive = 0;
+uint16_t sim800_on_off = 0;
 
 // I2C n2
 HAL_StatusTypeDef status_i2c_2;
@@ -243,7 +244,8 @@ int main(void)
 	  energy_fl =  *((float*)&rdata[0]);
 	  hours_work = rdata[1];
 	  pwm_value = (uint16_t)rdata[2];
-	  on_off_accum_value = (uint16_t)(rdata[2] >> 16);
+	  on_off_accum_value = ( (uint16_t)(rdata[2] >> 16) & 0x01 );
+	  sim800_on_off = ( (uint16_t)(rdata[2] >> 17) & 0x01 );
 	}
 
 	// print kwt
@@ -272,11 +274,14 @@ int main(void)
 	  HAL_GPIO_WritePin(OFF_ACCUM_GPIO_Port, OFF_ACCUM_Pin, GPIO_PIN_SET);
 	}
 
+	// print sim800_on_off
+	Dwin_write_int16(USART6, 0x5030, sim800_on_off, flagDwinProgram);
 
 
 	LL_USART_EnableIT_RXNE(USART3);
 	LL_USART_EnableIT_RXNE(USART6);
 	LL_USART_EnableIT_RXNE(USART1);
+	LL_USART_EnableIT_RXNE(USART2);
 
 
 	sim_status = reset_sim800_connect_to_server();
@@ -290,6 +295,8 @@ int main(void)
 		flag_sim800_error = 1;
 		Dwin_write_int16(USART6, 0x5020, 0, flagDwinProgram);
 		Dwin_write_int16(USART6, 0x5021, 0, flagDwinProgram);
+		// write to lcd csq
+		Dwin_write_int16(USART6, 0x5026, 0, flagDwinProgram);
 	}
 
 
@@ -329,7 +336,7 @@ int main(void)
 		  event_happened = 0;
 
 
-		if( flag_sim800_error == 0 ){
+		if( flag_sim800_error == 0 && sim800_on_off == 1){
 
 
 			  	defaultStrToStruct(&telData);
@@ -443,6 +450,8 @@ int main(void)
 					flag_sim800_error = 1;
 					Dwin_write_int16(USART6, 0x5020, 0, flagDwinProgram);
 					Dwin_write_int16(USART6, 0x5021, 0, flagDwinProgram);
+					// write to lcd csq
+					Dwin_write_int16(USART6, 0x5026, 0, flagDwinProgram);
 				}
 		}
 
@@ -460,7 +469,10 @@ int main(void)
 
     	  energy_fl = energy_fl + (voltage_fl * current_fl) / 1000;
     	  hours_work = hours_work + 1;
-    	  myBuf_t wdata[BUFFSIZE] = {*((uint32_t*)&energy_fl), hours_work, (uint32_t)pwm_value | (uint32_t)(on_off_accum_value << 16), 0x00000000};
+    	  myBuf_t wdata[BUFFSIZE] = {*((uint32_t*)&energy_fl),
+    			  	hours_work,
+					(uint32_t)pwm_value | ( (uint32_t)on_off_accum_value << 16 ) | ( (uint32_t)sim800_on_off << 17 ),
+					0x00000000};
           write_to_flash(wdata); // запись данных во флеш
 
           // print kwt
@@ -845,6 +857,10 @@ static void MX_USART2_UART_Init(void)
   GPIO_InitStruct.Alternate = LL_GPIO_AF_7;
   LL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
+  /* USART2 interrupt Init */
+  NVIC_SetPriority(USART2_IRQn, NVIC_EncodePriority(NVIC_GetPriorityGrouping(),0, 0));
+  NVIC_EnableIRQ(USART2_IRQn);
+
   /* USER CODE BEGIN USART2_Init 1 */
 
   /* USER CODE END USART2_Init 1 */
@@ -1079,6 +1095,12 @@ static void MX_GPIO_Init(void)
 uint8_t reset_sim800_connect_to_server() {
 		int i;
 		uint8_t sim_status;
+
+		if(sim800_on_off == 0){
+			HAL_GPIO_WritePin(GATE_PWRKEY_GPIO_Port, GATE_PWRKEY_Pin, GPIO_PIN_RESET);
+			HAL_GPIO_WritePin(GATE_V_SIM_GPIO_Port, GATE_V_SIM_Pin, GPIO_PIN_RESET);
+			return 3;	// ret 3 -> error
+		}
 
 		//HAL_IWDG_Refresh(&hiwdg); //reset wdg
 
@@ -1356,6 +1378,21 @@ void read_sensor_write_lcd(void){
 
 	// print potencial
 	Dwin_write_float(USART6, 0x5004, adc_potect_v, flagDwinProgram);
+
+//	if(sim800_on_off == 0){
+//		HAL_GPIO_WritePin(GATE_PWRKEY_GPIO_Port, GATE_PWRKEY_Pin, GPIO_PIN_RESET);
+//		HAL_GPIO_WritePin(GATE_V_SIM_GPIO_Port, GATE_V_SIM_Pin, GPIO_PIN_RESET);
+//		Dwin_write_int16(USART6, 0x5020, 0, flagDwinProgram);
+//		Dwin_write_int16(USART6, 0x5021, 0, flagDwinProgram);
+//	}else{
+//		if(flag_sim800_error == 1){
+//			Dwin_write_int16(USART6, 0x5020, 0, flagDwinProgram);
+//			Dwin_write_int16(USART6, 0x5021, 0, flagDwinProgram);
+//		}else{
+//			Dwin_write_int16(USART6, 0x5020, 1, flagDwinProgram);
+//			Dwin_write_int16(USART6, 0x5021, 1, flagDwinProgram);
+//		}
+//	}
 
 	HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
 
